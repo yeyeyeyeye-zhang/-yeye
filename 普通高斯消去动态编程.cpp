@@ -12,11 +12,10 @@ std::vector<double> b(n);
 pthread_mutex_t mutex_task;//新增
 int next_arr=0;//新增，在主函数中赋值为k（从第k+1行开始）
 double sum=0;
-
 struct threadParam_t
 {
-	int k_;//消去的轮次
-	int t_id_;//线程id(动态分配线程没有用到)
+    int k_;//消去的轮次
+    int t_id_;//线程id
 };
 void* threadFunc(void* param)
 {
@@ -30,7 +29,7 @@ void* threadFunc(void* param)
         task=next_arr++;//获取第next_arr行的任务
         pthread_mutex_unlock(&mutex_task);
         if(task>=n)break;
-		b[task]-=A[task][k]*b[k];
+		b[task]=b[task]-A[task][k]*b[k];
         for(int j=k+1;j<n;j++)
         {
             A[task][j]=A[task][j]-A[task][k]*A[k][j];
@@ -157,8 +156,8 @@ int main()
 		{
 			A[k][j] = A[k][j] / A[k][k];//此时第k行的第k列之后的元素都缩小了 A[k][k]倍
 		}
+		b[k]=b[k]/A[k][k];//行变换，也都缩小A[k][k]倍
 		A[k][k] = 1;//对角线上的元素
-		b[k]/= A[k][k];//行变换，也都缩小A[k][k]倍
 
 		//创建工作线程，进行消去操作
 		int worker_count = 7; //7
@@ -180,6 +179,8 @@ int main()
 		for (int t_id = 0; t_id < worker_count; t_id++) {
 			pthread_join(handles[t_id], NULL);
 		}
+		print_vector(b);
+        std::cout << "上面是消去步骤中k=" <<k<<"时,b向量的值"<< std::endl;
 		print_matrix(A);
 	    std::cout << "上面是消去步骤中k=" <<k<<"时,A矩阵的值"<< std::endl;
 		//完成消去之后要进行回代

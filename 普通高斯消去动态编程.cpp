@@ -5,7 +5,7 @@
 #include<time.h>
 #include<pthread.h>
 #include <emmintrin.h>
-
+#include<chrono>//跨平台的高精度计时
 int n = 8;//调整n,调整问题规模（矩阵大小）
 std::vector<std::vector<double>> A(n, std::vector<double>(n));
 std::vector<double> b(n);
@@ -149,6 +149,7 @@ int main()
 	std::cout << "上面是b向量的初始值" << std::endl;
 	print_matrix(A);
 	std::cout << "上面是A矩阵的初始值" << std::endl;
+	auto start = std::chrono::high_resolution_clock::now();
 	for (int k = 0; k < n; k++)//最外层循环步骤之间数据有关联，无法进行多线程
 	{
         next_arr=k+1;//起点行的位置
@@ -204,6 +205,10 @@ int main()
         }
         x[i] = sum / A[i][i];
     }
+	auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> duration2 = end - start;
+	double allDuration = duration2.count();
+	std::cout << "消去回代花费的时间(s)是:"<<allDuration<< std::endl;
     print_vector(x);
 	std::cout << "上面是串行消去得到的结果向量x的值"<< std::endl;
 

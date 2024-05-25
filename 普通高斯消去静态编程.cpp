@@ -7,10 +7,7 @@
 #include <emmintrin.h>
 #include<semaphore.h>//引入信号量
 #define NUM_THREADS 4//定义线程数量（需要能被n整除）
-//待办：1.debug:出现了不断运行的情况（可能存在死锁）
-//2.实验报告对应部分
-//3.观看实验录屏，完善要求定位
-//4.后两种编程方式的开展
+
 
 int n = 8;//调整n,调整问题规模（矩阵大小）
 std::vector<std::vector<double>> A(n, std::vector<double>(n));
@@ -47,9 +44,10 @@ void *threadFunc(void* param)
             }
             A[i][k]=0;
         }
+        sem_post(&sem_main);//唤醒主线程
+        sem_wait(&sem_wokerend[t_id]);//阻塞，等待主线程唤醒进入下一轮
     }
-    sem_post(&sem_main);//唤醒主线程
-    sem_wait(&sem_wokerend[t_id]);//阻塞，等待主线程唤醒进入下一轮
+   
     pthread_exit(NULL);
 }
 
@@ -172,6 +170,8 @@ int main()
         {
             sem_wait(&sem_main);
         }
+        print_matrix(A);
+	    std::cout << "上面是消去步骤中k=" <<k<<"时,A矩阵的值"<< std::endl;
         //主线程再次唤醒工作线程进行下一轮的消去任务
         for(int t_id=0;t_id<NUM_THREADS;++t_id)
         {

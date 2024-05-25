@@ -6,6 +6,7 @@
 #include<pthread.h>
 #include <emmintrin.h>
 #include<semaphore.h>//引入信号量
+#include<chrono>//跨平台的高精度计时
 #define NUM_THREADS 4//定义线程数量（需要能被n整除）
 //待办：1.debug:出现了不断运行的情况（可能存在死锁）
 //2.实验报告对应部分
@@ -47,6 +48,45 @@ void *threadFunc(void* param)
                 A[i][j]=A[i][j]-A[i][k]*A[k][j];
             }
             A[i][k]=0;
+        }
+        sem_post(&sem_main);//唤醒主线程
+        sem_wait(&sem_wokerend[t_id]);//阻塞，等待主线程唤醒进入下一轮
+    }
+   
+    pthread_exit(NULL);
+}
+
+
+void *threadFunc_SSE2(void* param)
+{
+    threadParam_t *p=(threadParam_t*)param;
+    int t_id=p->t_id_;
+    
+    for(int k=0;k<n;++k)
+    {
+        sem_wait(&sem_wokerstart[t_id]);//阻塞，等待主线程完成除法操作（操作自己专属的信号量）
+        __m128d A_ik, A_kj, product, result;
+        //循环划分任务
+        for(int i=k+1+t_id;i<n;i+=NUM_THREADS)//行数（确定了行数之后，可以自己跑自己的）
+        {
+            A_ik = _mm_load1_pd(&A[i][k]); // 加载 A[i][k] 至两个双精度位置
+            b[i]=b[i]-A[i][k]*b[k];
+            for (int j = k + 1; j + 1 < n; j += 2) // 用 SSE2 对两个相邻元素进行操作
+            {
+                A_kj = _mm_loadu_pd(&A[k][j]); // 加载 A[k][j] 和 A[k][j+1]
+                product = _mm_mul_pd(A_ik, A_kj); // 计算 A[i][k] * A[k][j] 和 A[i][k] * A[k][j+1]
+                
+                result = _mm_loadu_pd(&A[i][j]); // 加载 A[i][j] 和 A[i][j+1]
+                result = _mm_sub_pd(result, product); // 计算 A[i][j] - A[i][k] * A[k][j]
+                _mm_storeu_pd(&A[i][j], result); // 存储结果
+            }
+
+            // 如果 n 是奇数，那么处理最后一个元素
+            for (int j = (n - 1) & ~1; j < n; ++j) // 抹掉最低位，确保是偶数
+            {
+                A[i][j] -= A[i][k] * A[k][j];
+            }
+            A[i][k] = 0; // 已经被消去的行列元素设置为0
         }
         sem_post(&sem_main);//唤醒主线程
         sem_wait(&sem_wokerend[t_id]);//阻塞，等待主线程唤醒进入下一轮
@@ -139,6 +179,7 @@ int main()
 	std::cout << "上面是b向量的初始值" << std::endl;
 	print_matrix(A);
 	std::cout << "上面是A矩阵的初始值" << std::endl;
+    auto start = std::chrono::high_resolution_clock::now();
     //消去过程
     //初始化信号量
     sem_init(&sem_main,0,0);//进程内线程共享，初始值为0
@@ -154,7 +195,8 @@ int main()
     for(int t_id=0;t_id<NUM_THREADS;t_id++)
     {
         param[t_id].t_id_ = t_id;
-        pthread_create(&handles[t_id], NULL, threadFunc, (void*)&param[t_id]);
+        pthread_create(&handles[t_id], NULL, threadFunc_SSE2, (void*)&param[t_id]);
+        //pthread_create(&handles[t_id], NULL, threadFunc, (void*)&param[t_id]);
     }
 
     for(int k=0;k<n;++k)
@@ -195,7 +237,6 @@ int main()
     }
 
 
-
     //回代过程
     print_vector(b);
 	std::cout << "上面是b向量消去过程结束后的值" << std::endl;
@@ -212,6 +253,10 @@ int main()
         }
         x[i] = sum / A[i][i];
     }
+    auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> duration2 = end - start;
+	double allDuration = duration2.count();
+	std::cout << "消去回代花费的时间(s)是:"<<allDuration<< std::endl;
     print_vector(x);
 	std::cout << "上面是串行消去得到的结果向量x的值"<< std::endl;
 

@@ -8,10 +8,7 @@
 #include<semaphore.h>//引入信号量
 #include<chrono>//跨平台的高精度计时
 #define NUM_THREADS 4//定义线程数量（需要能被n整除）
-//待办：1.debug:出现了不断运行的情况（可能存在死锁）
-//2.实验报告对应部分
-//3.观看实验录屏，完善要求定位
-//4.后两种编程方式的开展
+
 
 int n = 8;//调整n,调整问题规模（矩阵大小）
 std::vector<std::vector<double>> A(n, std::vector<double>(n));
@@ -152,8 +149,8 @@ void reset_Matrix(std::vector<std::vector<double>>& A, int n)
 			A[i][j] = std::rand() % 99991;
 		}
 	}
-	print_matrix(A);
-	std::cout << "上面是A矩阵变换成普通矩阵前,原始上三角矩阵的值" << std::endl;
+	// print_matrix(A);
+	// std::cout << "上面是A矩阵变换成普通矩阵前,原始上三角矩阵的值" << std::endl;
 	for (int k = 0; k < n; k++)//相加的元素从第0行加到最后一行
 	{
 		for (int i = k + 1; i < n; i++)//加到第k行之后的行上
@@ -171,94 +168,102 @@ void reset_vector(std::vector<double>& b, int n)
 
 int main()
 {
+    double allDuration=0;
+	int count_=0;
+	while(allDuration<0.5)
+	{
+		count_++;
+        
+        reset_Matrix(A, n);
+        reset_vector(b, n);
 
-	reset_Matrix(A, n);
-	reset_vector(b, n);
-
-	print_vector(b);
-	std::cout << "上面是b向量的初始值" << std::endl;
-	print_matrix(A);
-	std::cout << "上面是A矩阵的初始值" << std::endl;
-    auto start = std::chrono::high_resolution_clock::now();
-    //消去过程
-    //初始化信号量
-    sem_init(&sem_main,0,0);//进程内线程共享，初始值为0
-    for(int i=0;i<NUM_THREADS;++i)
-    {
-        sem_init(&sem_wokerstart[i],0,0);
-        sem_init(&sem_wokerend[i],0,0);
-    }
-
-    //创建线程
-    pthread_t handles[NUM_THREADS];
-    threadParam_t param[NUM_THREADS];
-    for(int t_id=0;t_id<NUM_THREADS;t_id++)
-    {
-        param[t_id].t_id_ = t_id;
-        pthread_create(&handles[t_id], NULL, threadFunc_SSE2, (void*)&param[t_id]);
-        //pthread_create(&handles[t_id], NULL, threadFunc, (void*)&param[t_id]);
-    }
-
-    for(int k=0;k<n;++k)
-    {
-        for(int j=k+1;j<n;j++)
+        // print_vector(b);
+        // std::cout << "上面是b向量的初始值" << std::endl;
+        // print_matrix(A);
+        // std::cout << "上面是A矩阵的初始值" << std::endl;
+        auto start = std::chrono::high_resolution_clock::now();
+        //消去过程
+        //初始化信号量
+        sem_init(&sem_main,0,0);//进程内线程共享，初始值为0
+        for(int i=0;i<NUM_THREADS;++i)
         {
-            A[k][j]=A[k][j]/A[k][k];
+            sem_init(&sem_wokerstart[i],0,0);
+            sem_init(&sem_wokerend[i],0,0);
         }
-        b[k]=b[k]/A[k][k];
-        A[k][k]=1;
-        //开始唤醒工作线程
+
+        //创建线程
+        pthread_t handles[NUM_THREADS];
+        threadParam_t param[NUM_THREADS];
+        for(int t_id=0;t_id<NUM_THREADS;t_id++)
+        {
+            param[t_id].t_id_ = t_id;
+            pthread_create(&handles[t_id], NULL, threadFunc_SSE2, (void*)&param[t_id]);
+            //pthread_create(&handles[t_id], NULL, threadFunc, (void*)&param[t_id]);
+        }
+
+        for(int k=0;k<n;++k)
+        {
+            for(int j=k+1;j<n;j++)
+            {
+                A[k][j]=A[k][j]/A[k][k];
+            }
+            b[k]=b[k]/A[k][k];
+            A[k][k]=1;
+            //开始唤醒工作线程
+            for(int t_id=0;t_id<NUM_THREADS;++t_id)
+            {
+                sem_post(&sem_wokerstart[t_id]);
+            }
+            //主线程睡眠（等待所有线程完成消去工作）
+            for(int t_id=0;t_id<NUM_THREADS;++t_id)
+            {
+                sem_wait(&sem_main);
+            }
+            // print_matrix(A);
+            // std::cout << "上面是消去步骤中k=" <<k<<"时,A矩阵的值"<< std::endl;
+            //主线程再次唤醒工作线程进行下一轮的消去任务
+            for(int t_id=0;t_id<NUM_THREADS;++t_id)
+            {
+                sem_post(&sem_wokerend[t_id]);
+            }
+        }
         for(int t_id=0;t_id<NUM_THREADS;++t_id)
         {
-            sem_post(&sem_wokerstart[t_id]);
+            pthread_join(handles[t_id], NULL);//等待所有线程退出
         }
-        //主线程睡眠（等待所有线程完成消去工作）
-        for(int t_id=0;t_id<NUM_THREADS;++t_id)
-        {
-            sem_wait(&sem_main);
-        }
-        print_matrix(A);
-	    std::cout << "上面是消去步骤中k=" <<k<<"时,A矩阵的值"<< std::endl;
-        //主线程再次唤醒工作线程进行下一轮的消去任务
-        for(int t_id=0;t_id<NUM_THREADS;++t_id)
-        {
-            sem_post(&sem_wokerend[t_id]);
-        }
-    }
-    for(int t_id=0;t_id<NUM_THREADS;++t_id)
-    {
-        pthread_join(handles[t_id], NULL);//等待所有线程退出
-    }
 
-    sem_destroy(&sem_main);
-    for(int i = 0; i < NUM_THREADS; ++i) {
-        sem_destroy(&sem_wokerstart[i]);
-        sem_destroy(&sem_wokerend[i]);
-    }
+        sem_destroy(&sem_main);
+        for(int i = 0; i < NUM_THREADS; ++i) {
+            sem_destroy(&sem_wokerstart[i]);
+            sem_destroy(&sem_wokerend[i]);
+        }
 
 
-    //回代过程
-    print_vector(b);
-	std::cout << "上面是b向量消去过程结束后的值" << std::endl;
-	std::vector<double> x(n);
-	std::vector<double> x2(n);
-    back_SSE2(x2);
-	print_vector(x2);
-	std::cout << "上面是SSE2编程消去得到的结果向量x的值"<< std::endl;
-    x[n - 1] = b[n - 1] / A[n - 1][n - 1];
-    for (int i = n - 2; i >= 0; i--) {
-        double sum = b[i];
-        for (int j = i + 1; j < n; j++) {
-            sum -= A[i][j] * x[j];
+        //回代过程
+        // print_vector(b);
+        // std::cout << "上面是b向量消去过程结束后的值" << std::endl;
+        std::vector<double> x(n);
+        std::vector<double> x2(n);
+        back_SSE2(x2);
+        // print_vector(x2);
+        // std::cout << "上面是SSE2编程消去得到的结果向量x的值"<< std::endl;
+        x[n - 1] = b[n - 1] / A[n - 1][n - 1];
+        for (int i = n - 2; i >= 0; i--) {
+            double sum = b[i];
+            for (int j = i + 1; j < n; j++) {
+                sum -= A[i][j] * x[j];
+            }
+            x[i] = sum / A[i][i];
         }
-        x[i] = sum / A[i][i];
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> duration2 = end - start;
-	double allDuration = duration2.count();
-	std::cout << "消去回代花费的时间(s)是:"<<allDuration<< std::endl;
-    print_vector(x);
-	std::cout << "上面是串行消去得到的结果向量x的值"<< std::endl;
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration2 = end - start;
+        allDuration += duration2.count();
+        // print_vector(x);
+        // std::cout << "上面是串行消去得到的结果向量x的值"<< std::endl;
+
+	}
+	std::cout << "消去回代花费的平均时间(s)是:"<<allDuration/count_<< std::endl;
+
 
 
 	return 0;

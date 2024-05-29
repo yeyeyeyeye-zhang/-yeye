@@ -7,12 +7,12 @@
 #include <emmintrin.h>
 #include<semaphore.h>//引入信号量
 #include<chrono>//跨平台的高精度计时
-#define NUM_THREADS 4//定义线程数量（需要能被n整除）
+#define NUM_THREADS 2//定义线程数量（需要能被n整除）
 //待办：1.debug:出现了不断运行的情况（可能存在死锁）
 //2.实验报告对应部分
 //3.测试表格
 
-int n = 8;//调整n,调整问题规模（矩阵大小）
+int n = 512;//调整n,调整问题规模（矩阵大小）
 std::vector<std::vector<double>> A(n, std::vector<double>(n));
 std::vector<double> b(n);
 pthread_mutex_t mutex_task;//新增
@@ -183,7 +183,7 @@ int main()
 {
     double allDuration=0;
 	int count_=0;
-	while(allDuration<0.5)
+	while(allDuration<5)
 	{
 		count_++;
         reset_Matrix(A, n);
@@ -241,7 +241,7 @@ int main()
         // std::cout << "上面是串行消去得到的结果向量x的值"<< std::endl;
 
 	}
-	std::cout << "消去回代花费的平均时间(s)是:"<<allDuration/count_<< std::endl;
+	std::cout << "消去回代花费的平均时间(ms)是:"<<(allDuration/count_)*1000<< std::endl;
 
 
 

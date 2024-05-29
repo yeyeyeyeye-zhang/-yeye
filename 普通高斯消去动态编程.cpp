@@ -6,72 +6,38 @@
 #include<pthread.h>
 #include <emmintrin.h>
 #include<chrono>//跨平台的高精度计时
-#define NUM_THREADS 8//定义线程数量（需要能被n整除）
-//待办：1.修改实验报告动态编程部分主要代码，以及大部分关于b的代码
-//2.实现另外两者编程方式
-//3.书写实验报告
-//4.不同规模、不同线程下的测试
-int n = 512;//调整n,调整问题规模（矩阵大小）
+int n = 8;//调整n,调整问题规模（矩阵大小）
 std::vector<std::vector<double>> A(n, std::vector<double>(n));
 std::vector<double> b(n);
 pthread_mutex_t mutex_task;//新增
 int next_arr=0;//新增，在主函数中赋值为k（从第k+1行开始）
 double sum=0;
-
 struct threadParam_t
 {
-	int k_;//消去的轮次
-	int t_id_;//线程id
+    int k_;//消去的轮次
+    int t_id_;//线程id
 };
 void* threadFunc(void* param)
 {
 	threadParam_t* p = (threadParam_t*)param;//把void*转换成需要的类型
-    //静态分配任务
+    //动态分配任务
 	int k = p->k_;
-	int t_id = p->t_id_;
-    for(int i=k+1+t_id;i<n;i+=NUM_THREADS)//行数
+    int task=0;
+    while(1)
     {
-        //消去
-        b[i]=b[i]-A[i][k]*b[k];
-        for(int j=k+1;j<n;++j)//从第k列到n-1列
+        pthread_mutex_lock(&mutex_task);
+        task=next_arr++;//获取第next_arr行的任务
+        pthread_mutex_unlock(&mutex_task);
+        if(task>=n)break;
+		b[task]=b[task]-A[task][k]*b[k];
+        for(int j=k+1;j<n;j++)
         {
-            A[i][j]=A[i][j]-A[i][k]*A[k][j];
+            A[task][j]=A[task][j]-A[task][k]*A[k][j];
         }
-        A[i][k]=0;
-    }
-	pthread_exit(NULL);
-}
-
-void* threadFunc_SSE2(void* param)
-{
-    threadParam_t* p = (threadParam_t*)param;//把void*转换成需要的类型
-    //静态分配任务
-	int k = p->k_;
-	int t_id = p->t_id_;
-
-    __m128d A_ik, A_kj, product, result;
-    for (int i = k + 1 + t_id; i < n; i += NUM_THREADS) // 行数
-    {
-        A_ik = _mm_load1_pd(&A[i][k]); // 加载 A[i][k] 至两个双精度位置
-        b[i]=b[i]-A[i][k]*b[k];
-        for (int j = k + 1; j + 1 < n; j += 2) // 用 SSE2 对两个相邻元素进行操作
-        {
-            A_kj = _mm_loadu_pd(&A[k][j]); // 加载 A[k][j] 和 A[k][j+1]
-            product = _mm_mul_pd(A_ik, A_kj); // 计算 A[i][k] * A[k][j] 和 A[i][k] * A[k][j+1]
-            
-            result = _mm_loadu_pd(&A[i][j]); // 加载 A[i][j] 和 A[i][j+1]
-            result = _mm_sub_pd(result, product); // 计算 A[i][j] - A[i][k] * A[k][j]
-            _mm_storeu_pd(&A[i][j], result); // 存储结果
-        }
-
-        // 如果 n 是奇数，那么处理最后一个元素
-        for (int j = (n - 1) & ~1; j < n; ++j) // 抹掉最低位，确保是偶数
-        {
-            A[i][j] -= A[i][k] * A[k][j];
-        }
-        A[i][k] = 0; // 已经被消去的行列元素设置为0
+        A[task][k]=0;
     }
     pthread_exit(NULL);
+
 }
 
 void back_SSE2(std::vector<double>& x) {
@@ -166,11 +132,22 @@ int main()
 {
 	double allDuration=0;
 	int count_=0;
-	while(allDuration<10)
+	while(allDuration<0.5)
 	{
 		count_++;
 		reset_Matrix(A, n);
 		reset_vector(b, n);
+		// std::vector<std::vector<double>> A = { {2, 1, -1,1}, {-3, -1, 2,1}, {-2, 1, 2,1},{0,0,0,1} };
+		// std::vector<double> b = { 8, -11, -3,0};
+		// A = {{1, 87349, 60929, 13367, 79909, 13447, 71338, 53414},
+		//                                     {1, 87350, 106018, 80043, 105643, 53382, 99047, 78084},
+		//                                     {2, 174699, 166948, 128753, 226651, 88585, 229573, 226252},
+		//                                     {4, 349398, 333895, 222164, 448852, 203987, 454248, 445432},
+		//                                     {8, 698796, 667790, 444327, 861056, 455923, 927478, 854731},
+		//                                     {16, 1.39759e+06, 1.33558e+06, 888654, 1.72211e+06, 815325, 1.8561e+06, 1.72114e+06},
+		//                                     {32, 2.79518e+06, 2.67116e+06, 1.77731e+06, 3.44422e+06, 1.63065e+06, 3.63779e+06, 3.38656e+06},
+		//                                     {64, 5.59037e+06, 5.34232e+06, 3.55462e+06, 6.88844e+06, 3.2613e+06, 7.27558e+06, 6.76561e+06}};
+		// b = {87349, 60929, 13367, 79909, 13447, 71338, 53414, 45089};
 
 		// print_vector(b);
 		// std::cout << "上面是b向量的初始值" << std::endl;
@@ -186,26 +163,25 @@ int main()
 			}
 			b[k]=b[k]/A[k][k];//行变换，也都缩小A[k][k]倍
 			A[k][k] = 1;//对角线上的元素
-			
 
 			//创建工作线程，进行消去操作
-			pthread_t* handles = (pthread_t*)malloc(sizeof(pthread_t) * NUM_THREADS); //创建对应的handle（动态分配内存）
-			threadParam_t* param = (threadParam_t*)malloc(sizeof(threadParam_t) * NUM_THREADS); //创建对应的线程数据结构（这样可以一起传参）
+			int worker_count = 7; //7
+			pthread_t* handles = (pthread_t*)malloc(sizeof(pthread_t) * worker_count); //创建对应的handle（动态分配内存）
+			threadParam_t* param = (threadParam_t*)malloc(sizeof(threadParam_t) * worker_count); //创建对应的线程数据结构（这样可以一起传参）
 
 			// 分配任务
-			for (int t_id = 0; t_id < NUM_THREADS; t_id++) {
+			for (int t_id = 0; t_id < worker_count; t_id++) {
 				param[t_id].k_ = k;
 				param[t_id].t_id_ = t_id;
 			}
 
 			// 创建线程
-			for (int t_id = 0; t_id < NUM_THREADS; t_id++) {
-				//pthread_create(&handles[t_id], NULL, threadFunc_SSE2, (void*)&param[t_id]);
+			for (int t_id = 0; t_id < worker_count; t_id++) {
 				pthread_create(&handles[t_id], NULL, threadFunc, (void*)&param[t_id]);
 			}
 
 			// 主线程挂起等待所有的工作线程完成此轮消去工作
-			for (int t_id = 0; t_id < NUM_THREADS; t_id++) {
+			for (int t_id = 0; t_id < worker_count; t_id++) {
 				pthread_join(handles[t_id], NULL);
 			}
 			// print_vector(b);
@@ -238,10 +214,8 @@ int main()
 		allDuration += duration2.count();
 		// print_vector(x);
 		// std::cout << "上面是串行消去得到的结果向量x的值"<< std::endl;
-
 	}
 	std::cout << "消去回代花费的平均时间(ms)是:"<<(allDuration/count_)*1000<< std::endl;
-
 
 
 

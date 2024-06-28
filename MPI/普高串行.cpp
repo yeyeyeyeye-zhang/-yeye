@@ -3,12 +3,8 @@
 #include <stdlib.h>
 #include<iomanip>
 #include<time.h>
-#include<pthread.h>
 #include<chrono>//跨平台的高精度计时
-#define NUM_THREADS 2//定义线程数量（需要能被n整除）
-//待办：1.调试测试本文件，学习编程
-//2.生成另外三个文件，书写报告
-//3.性能测试结果处理
+
 int n = 4096;//调整n,调整问题规模（矩阵大小）
 std::vector<std::vector<double>> A(n, std::vector<double>(n));
 std::vector<double> b(n);
